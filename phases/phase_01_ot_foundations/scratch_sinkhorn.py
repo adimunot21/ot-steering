@@ -67,9 +67,9 @@ def scratch_sinkhorn(
     assert reg > 0, f"reg must be positive, got {reg}"
     assert np.all(a > 0), "source histogram must be strictly positive (log-domain)"
     assert np.all(b > 0), "target histogram must be strictly positive (log-domain)"
-    assert np.isclose(
-        a.sum(), b.sum(), atol=1e-8
-    ), f"marginal totals must agree: a.sum()={a.sum()} b.sum()={b.sum()}"
+    assert np.isclose(a.sum(), b.sum(), atol=1e-8), (
+        f"marginal totals must agree: a.sum()={a.sum()} b.sum()={b.sum()}"
+    )
 
     # Log-domain variables. log_K[i, j] = -M[i, j] / reg.
     log_a = np.log(a)

@@ -62,9 +62,9 @@ def scratch_emd(
     assert b.shape == (m,), f"b shape {b.shape} != ({m},)"
     assert np.all(a >= -1e-12), "source histogram has negative entries"
     assert np.all(b >= -1e-12), "target histogram has negative entries"
-    assert np.isclose(
-        a.sum(), b.sum(), atol=1e-8
-    ), f"marginal totals must agree: a.sum()={a.sum()} b.sum()={b.sum()}"
+    assert np.isclose(a.sum(), b.sum(), atol=1e-8), (
+        f"marginal totals must agree: a.sum()={a.sum()} b.sum()={b.sum()}"
+    )
 
     # Decision variable: x = vec(P) of length n*m, with P[i, j] -> x[i*m + j].
     c = M.reshape(-1)

@@ -1,11 +1,65 @@
 # PROGRESS
 
-## Current phase: 02 — Gromov-Wasserstein
+## Current phase: 03 — LLMs, activations, and steering baselines
 
-Phase 1 (OT foundations) shipped. Next session should branch
-`phase-02-gromov-wasserstein` and start Phase 2.
+Phase 2 (Gromov-Wasserstein) shipped. Next session should branch
+`phase-03-llms-and-steering-baselines` and start Phase 3.
 
 ## Session log
+
+### 2026-05-18 — Phase 2: Gromov-Wasserstein
+
+Completed:
+
+- [x] Production GW wrapper `src/ot_steering/ot/gw.py`:
+      `solve_entropic_gw(C1, C2, p, q, cfg, *, rng)` over POT's
+      `ot.gromov.entropic_gromov_wasserstein`, returning
+      `(coupling, gw_cost)`. `GWConfig` (subclass of `BaseConfig`):
+      `reg`, `loss_fun in {"square_loss","kl_loss"}`, `num_iter_max`,
+      `stop_threshold`, `num_restart`, `warn_on_no_convergence`.
+      Multi-restart logic implemented in the wrapper (POT has no built-in
+      restart) — randomised initial couplings projected onto the
+      transport polytope via 50 Sinkhorn rescalings, lowest-cost run kept.
+      POT's GW solver has no `warn` knob, so the wrapper uses a
+      `warnings.catch_warnings` block to honour `warn_on_no_convergence`.
+- [x] `src/ot_steering/ot/barycentric.py`:
+      `barycentric_project(coupling, target_features, source_marginal=None)`
+      → `(n, d_target)`. Handles empty rows (returns zero vector, not NaN)
+      and accepts an explicit source marginal for numerically clean
+      couplings.
+- [x] Tests in `tests/ot/`:
+      - `test_gw.py` (7 tests): GW on identical clouds yields a near-
+        diagonal coupling; GW recovers a 2D rotation (3 seeds, accuracy
+        ≥ 85 %); GW cost symmetric under side-swap; pydantic validation;
+        shape mismatch errors.
+      - `test_barycentric.py` (5 tests): permutation coupling maps source
+        → matched targets exactly; uniform coupling maps every source to
+        target mean; explicit marginal overrides inferred; empty row →
+        zero (not NaN); shape mismatches raise.
+      All 43 tests pass; longest 7.5 s (still within the <10 s budget).
+- [x] Demo / figures / notebook in `phases/phase_02_gromov_wasserstein/`:
+      - `experiments/demo.py` — `run_rotation_demo()` returns a
+        `RotationDemo` dataclass with source X (n=80, 2D),
+        target Y = X @ R + small_noise, coupling, recovered permutation,
+        accuracy, and a displacement-interpolation trajectory.
+      - `experiments/make_figures.py` — renders the four chapter figures
+        (`01_two_clouds_no_alignment`, `02_gw_coupling_lines`,
+        `03_coupling_heatmap`, `04_recovered_correspondence_vs_truth`).
+      - `notebook.ipynb` — executes top-to-bottom cleanly via
+        `jupyter nbconvert --execute`.
+- [x] `phases/phase_02_gromov_wasserstein/chapter.md` — full chapter
+      (~2 100 words) and `README.md`.
+- [x] Ruff, ruff-format, mypy strict on `src/`, `pytest -q` all pass.
+
+Notes / decisions:
+
+- POT's `entropic_gromov_wasserstein` underflows when `epsilon < ~1e-3`
+  (inner Sinkhorn is non-log-domain). Chapter and config defaults
+  document the safe range; the rotation tests use `reg=0.01`.
+- Multi-restart wrapped *inside* `solve_entropic_gw` so callers don't
+  have to write the restart loop themselves. The lowest-cost run wins.
+- We had earlier guesses of `num_restart` as a POT-exposed parameter; it
+  isn't — we own it in the wrapper.
 
 ### 2026-05-18 — Phase 1: OT foundations
 
@@ -99,23 +153,29 @@ Notes / decisions:
 - POT-equivalent OT solvers will land in `src/ot_steering/ot/` in Phase 1 alongside
   the from-scratch pedagogical implementations in `phases/phase_01_ot_foundations/`.
 
-## Next session (Phase 2) — Gromov-Wasserstein
+## Next session (Phase 3) — LLMs, activations, and steering baselines
 
-Goal: reader and code both understand structural matching across incomparable spaces.
+Goal: build the LLM-side infrastructure (model loading, activation extraction
+via PyTorch hooks, on-disk cache) and reproduce a known steering result.
 
 Deliverables:
 
-- Thin wrappers in `src/ot_steering/ot/gw.py` over POT's
-  `entropic_gromov_wasserstein` with pydantic-validated config.
-- Barycentric projection utility in `src/ot_steering/ot/barycentric.py`.
-- Toy demo: GW recovers a known rotation between two 2D point clouds with no
-  shared coordinate frame.
-- Tests.
-- `phases/phase_02_gromov_wasserstein/chapter.md`.
+- Model loader supporting Pythia-160M, GPT-2-small, TinyLlama-1.1B (4-bit),
+  Qwen2.5-0.5B.
+- Activation extractor with PyTorch forward hooks and on-disk cache keyed
+  by hash of `(model_id, dataset_id, layer, dtype)`.
+- Contrastive dataset loaders for sentiment, truthfulness, and refusal
+  (Arditi-style benign harmful set).
+- Steering baselines: difference-in-means (ActAdd),
+  mean-centring (Jorgensen-style), CAA-style if applicable.
+- Steering evaluation harness: success rate, off-target perplexity,
+  MMLU sanity check (small sample).
+- Chapter 3.
 
-Done when: GW correctly recovers the known correspondence on a 2D toy across
-multiple seeds; barycentric projection is implemented and tested; chapter 2
-reads naturally and follows Chapter 1's voice.
+Done when: a known steering result (e.g., sentiment direction on GPT-2-small)
+is reproduced within reasonable tolerance of published numbers; eval harness
+produces stable numbers across seeds; chapter 3 walks the reader from
+"what is a transformer" through "what does it mean to steer one."
 
 ## Open issues
 

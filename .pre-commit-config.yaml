@@ -11,19 +11,26 @@ repos:
       - id: check-merge-conflict
       - id: detect-private-key
 
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.6.9
-    hooks:
-      - id: ruff
-        args: ["--fix"]
-      - id: ruff-format
-
-  # mypy runs against the project venv (not a hook-managed env) so it can see
-  # torch/numpy/etc. — installing those into a parallel pre-commit env would
-  # duplicate gigabytes of CUDA wheels. `language: system` calls whatever
-  # `mypy` is on PATH, which is the project venv after `pip install -e ".[dev]"`.
+  # ruff and mypy both run against the project venv (not a hook-managed env)
+  # so they share whatever versions the dev has installed via
+  # `pip install -e ".[dev]"`. Pinning a separate ruff in pre-commit would
+  # otherwise drift from the local ruff and cause format-loop fights.
   - repo: local
     hooks:
+      - id: ruff
+        name: ruff (lint)
+        entry: ruff check --fix
+        language: system
+        types_or: [python, pyi]
+        require_serial: true
+
+      - id: ruff-format
+        name: ruff (format)
+        entry: ruff format
+        language: system
+        types_or: [python, pyi]
+        require_serial: true
+
       - id: mypy
         name: mypy (strict on src/)
         entry: mypy
