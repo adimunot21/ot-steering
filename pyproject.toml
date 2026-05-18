@@ -147,8 +147,13 @@ minversion = "8.0"
 testpaths = ["tests"]
 pythonpath = ["src"]
 addopts = "-ra --strict-markers"
+markers = [
+    "slow: marks tests that download model weights or run multi-second inference; skipped unless --run-slow is passed",
+]
 filterwarnings = [
     "error",
     "ignore::DeprecationWarning:torch.*",
     "ignore::UserWarning:bitsandbytes.*",
+    "ignore::FutureWarning:bitsandbytes.*",
+    "ignore::FutureWarning:transformers.*",
 ]

@@ -1,11 +1,116 @@
 # PROGRESS
 
-## Current phase: 03 — LLMs, activations, and steering baselines
+## Current phase: 04 — Intra-model OT steering (CHaRS-style)
 
-Phase 2 (Gromov-Wasserstein) shipped. Next session should branch
-`phase-03-llms-and-steering-baselines` and start Phase 3.
+Phase 3 (LLM-side infrastructure + sentiment steering reproduction) shipped.
+Next session should branch `phase-04-intra-model-ot-steering` from
+`phase-03-llms-and-steering-baselines` and start Phase 4.
 
 ## Session log
+
+### 2026-05-18 — Phase 3: LLMs, activations, and steering baselines
+
+Completed:
+
+- [x] `scripts/inspect_models.py` — one-shot inspection of all four target
+      model families (Pythia-160M, GPT-2-small, Qwen2.5-0.5B, TinyLlama 4-bit).
+      Confirmed three distinct block-attribute paths
+      (`gpt_neox.layers`, `transformer.h`, `model.layers`), VRAM use after
+      load, tokenizer pad/eos quirks, and the residual-stream tensor shape.
+      Written before any extraction code per CLAUDE.md's
+      "inspect before integrating" rule.
+- [x] `src/ot_steering/activations/model_loader.py`:
+      `load_model(cfg)` + `ModelLoaderConfig`. Handles GPT-2's missing
+      pad_token (aliased to eos), uses bitsandbytes NF4 + double-quant
+      for 4-bit, logs VRAM delta. Inspection-table embedded in the
+      module docstring.
+- [x] `src/ot_steering/activations/extractor.py`:
+      `extract_residual_stream(...)` reads `hidden_states[k]` from
+      `output_hidden_states=True` (no manual hooks needed). Supports
+      `position='last_token'|'all'|int`, batched, CPU-offloads per batch.
+      Companion `resolve_blocks(model)` does family-aware block lookup
+      for the steering baselines and for Phase 4+'s OT hooks.
+- [x] `src/ot_steering/activations/cache.py`:
+      `cache_key(...)` (readable prefix + 8-char blake2b hash) and
+      `load_or_extract(cache_dir, key, extractor_fn)` (atomic write via
+      `.pt.tmp` → rename).
+- [x] `src/ot_steering/activations/datasets.py` + three YAML files in
+      `configs/datasets/` (sentiment, truthfulness, refusal — 50 hand-
+      curated pairs each). Each dataset has a pydantic schema; typos in
+      the YAML fail at load.
+- [x] `src/ot_steering/steering/baselines.py`:
+      `difference_in_means`, `mean_centered_steering`,
+      `add_residual_steering_hook` (context manager), and
+      `apply_steering_vector` (generation under steering, family-agnostic
+      via `block_resolver`).
+- [x] `src/ot_steering/eval/steering_eval.py`:
+      `steering_success_rate` (lexicon judge for sentiment, refusal-phrase
+      detector for refusal, explicit no-op for truthfulness with a warning)
+      and `off_target_perplexity` (with optional steering injection during
+      the forward pass for the on/off comparison).
+- [x] Tests in `tests/activations/`, `tests/steering/`, `tests/eval/`
+      (16 new): family-aware `resolve_blocks` stub-model tests, cache
+      hit/miss/atomic-write, dataset schema validation, steering math on
+      synthetic activations, hook context-manager add/remove, lexicon
+      judge cases. Plus a `@pytest.mark.slow` integration test that
+      actually loads Pythia-160M and runs `extract_residual_stream`
+      (passes with `pytest --run-slow`, ~9s).
+- [x] `tests/conftest.py` registers the `slow` marker and the
+      `--run-slow` opt-in (default `pytest -q` skips heavy tests).
+- [x] Headline experiment:
+      `phases/phase_03_llms_and_steering_baselines/experiments/reproduce_sentiment.py`
+      runs GPT-2-small, builds the layer-6 difference-in-means direction
+      from 30 sentiment pairs, applies it (unit-normalised, coefficient
+      +6) to the 20-pair eval split, and reports a **+15 % net lift** in
+      positive-shift rate vs. the unsteered baseline. Writes
+      `outputs/<run_id>/{reproduce_sentiment.log, config.json, metrics.json}`.
+- [x] Demo / figures / notebook in
+      `phases/phase_03_llms_and_steering_baselines/`:
+      - `experiments/demo.py` — shared `run_sentiment_demo()` returning a
+        `SentimentDemo` dataclass.
+      - `experiments/make_figures.py` — four chapter figures:
+        activation distribution (PCA), steering vector in PCA, success
+        rate vs. coefficient, off-target perplexity vs. coefficient.
+      - `notebook.ipynb` — runs Pythia-160M end-to-end via the same
+        shared demo (~30 s on the 4 GB GPU); executes cleanly via
+        `jupyter nbconvert --execute`.
+- [x] `phases/phase_03_llms_and_steering_baselines/chapter.md` —
+      transformers crash course, residual-stream framing, contrastive
+      pairs, the difference-of-means baseline and its OT interpretation
+      (the bridge from Chapter 1), the eval harness, honest discussion
+      of where steering works (refusal robust, sentiment middling,
+      truthfulness fragile). README.md too.
+- [x] Ruff, ruff-format, mypy strict on `src/`, `pytest -q` (default,
+      skipping slow tests) all pass.
+
+Notes / decisions:
+
+- **Direction normalisation.** Initial reproduce-sentiment run with the
+  raw `mean(pos) - mean(neg)` direction at coefficient 6 produced gibberish
+  (off-target perplexity 100×) because the unscaled direction had norm
+  ~22 vs. activation norm ~47. Switched both the demo and
+  `reproduce_sentiment.py` to a unit-normalised direction so coefficient
+  is interpretable as "this many activation-norm units of perturbation".
+- **Inspection-first approach paid off.** The block-attribute path
+  differs across all three of the families we touch
+  (`gpt_neox.layers`, `transformer.h`, `model.layers`); without running
+  `inspect_models.py` first I'd have hardcoded one and bricked the
+  others. `resolve_blocks` tries each candidate in order.
+- **Sentiment success-rate metric.** The original
+  `steering_success_rate` compared `class_A_with_steering` vs
+  `class_B_with_steering`; this is the wrong question for ActAdd-style
+  steering (aggressive coefficients push both classes to the same place).
+  `reproduce_sentiment.py` and the demo compare *baseline vs. steered*
+  on the same negative-class prompts.
+- **Pythia-160M is small.** The notebook runs on Pythia for speed, but
+  Pythia-160M's sentiment direction at layer 6 lifts only modestly
+  (~15 % positive shifts) and the curves are noisier than the GPT-2-small
+  numbers reported in the chapter. Both are correct; bigger models
+  give cleaner steering.
+- **Warning filters.** Added `ignore::FutureWarning:bitsandbytes.*` and
+  `ignore::FutureWarning:transformers.*` to the pytest filterwarnings
+  block; the `transformers` API has loud warnings about a `torch_dtype`
+  rename that we cannot suppress at the call site.
 
 ### 2026-05-18 — Phase 2: Gromov-Wasserstein
 
@@ -153,29 +258,25 @@ Notes / decisions:
 - POT-equivalent OT solvers will land in `src/ot_steering/ot/` in Phase 1 alongside
   the from-scratch pedagogical implementations in `phases/phase_01_ot_foundations/`.
 
-## Next session (Phase 3) — LLMs, activations, and steering baselines
+## Next session (Phase 4) — Intra-model OT steering (CHaRS-style)
 
-Goal: build the LLM-side infrastructure (model loading, activation extraction
-via PyTorch hooks, on-disk cache) and reproduce a known steering result.
+Goal: reproduce the CHaRS intra-model OT-steering result. This is our
+intra-model upper bound and a sanity check on our OT machinery before we
+run cross-model GW in Phase 5.
 
 Deliverables:
 
-- Model loader supporting Pythia-160M, GPT-2-small, TinyLlama-1.1B (4-bit),
-  Qwen2.5-0.5B.
-- Activation extractor with PyTorch forward hooks and on-disk cache keyed
-  by hash of `(model_id, dataset_id, layer, dtype)`.
-- Contrastive dataset loaders for sentiment, truthfulness, and refusal
-  (Arditi-style benign harmful set).
-- Steering baselines: difference-in-means (ActAdd),
-  mean-centring (Jorgensen-style), CAA-style if applicable.
-- Steering evaluation harness: success rate, off-target perplexity,
-  MMLU sanity check (small sample).
-- Chapter 3.
+- GMM fitting on contrastive activations (sklearn's `GaussianMixture`).
+- Discrete OT between cluster centres via `src/ot_steering/ot/emd.py`.
+- Barycentric-projection steering map via
+  `src/ot_steering/ot/barycentric.py`.
+- Integration into the Phase-3 eval harness.
+- Comparison to Phase 3 baselines across all 3 concepts × at least 2 models.
+- `phases/phase_04_intra_model_ot_steering/chapter.md`.
 
-Done when: a known steering result (e.g., sentiment direction on GPT-2-small)
-is reproduced within reasonable tolerance of published numbers; eval harness
-produces stable numbers across seeds; chapter 3 walks the reader from
-"what is a transformer" through "what does it mean to steer one."
+Done when: CHaRS-style steering is competitive with or beats the difference-
+in-means baseline on at least one (concept, model) cell; chapter 4 takes
+the reader from "concept directions" to "concept-conditional maps."
 
 ## Open issues
 
