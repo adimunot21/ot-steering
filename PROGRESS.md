@@ -1,11 +1,62 @@
 # PROGRESS
 
-## Current phase: 01 — OT foundations
+## Current phase: 02 — Gromov-Wasserstein
 
-The repository scaffolding is complete; the next session should branch
-`phase-01-ot-foundations` and start Phase 1.
+Phase 1 (OT foundations) shipped. Next session should branch
+`phase-02-gromov-wasserstein` and start Phase 2.
 
 ## Session log
+
+### 2026-05-18 — Phase 1: OT foundations
+
+Completed:
+
+- [x] Pedagogical implementations in `phases/phase_01_ot_foundations/`:
+      `scratch_ot.py` (discrete OT via `scipy.optimize.linprog`) and
+      `scratch_sinkhorn.py` (log-domain Sinkhorn). Each is runnable standalone
+      with a sanity-check `__main__`.
+- [x] Production POT wrappers in `src/ot_steering/ot/`:
+      `emd.py` (`solve_emd` + `EMDConfig`) and `sinkhorn.py`
+      (`solve_sinkhorn` + `SinkhornConfig`, defaults to `method='sinkhorn_log'`).
+      Configs subclass `BaseConfig` (frozen, extra=forbid, validated at
+      construction).
+- [x] Tests in `tests/ot/`:
+      - `test_emd.py`: W(p, p)==0, symmetry, scale invariance of plan
+        under cost rescaling, agreement with scratch implementation on
+        a 5×5 problem, pydantic validation, shape mismatch error.
+      - `test_sinkhorn.py`: marginals preserved, convergence to EMD as
+        reg shrinks, log-domain stability at reg=1e-3, agreement with
+        scratch implementation, pydantic validation, shape mismatch error.
+      All 31 tests pass; longest test 7.5s (within the <10s budget).
+- [x] Demo / figures in `phases/phase_01_ot_foundations/`:
+      - `experiments/demo.py` — shared `run_demo()` returning a
+        `GaussianTransportDemo` dataclass with source/target clouds,
+        EMD plan, Sinkhorn plans across a reg sweep, and a displacement-
+        interpolation trajectory.
+      - `experiments/make_figures.py` — renders the four chapter figures
+        to `figures/*.png`.
+      - `notebook.ipynb` — executable companion that imports the same
+        shared demo (no parallel re-implementation). Executes top-to-bottom
+        cleanly via `jupyter nbconvert --execute`.
+- [x] `phases/phase_01_ot_foundations/chapter.md` — full chapter
+      (~1 800 words): worked example → Kantorovich LP → entropic
+      regularisation → Sinkhorn algorithm in log-space → barycentric map and
+      displacement interpolation → POT as the production solver.
+- [x] `phases/phase_01_ot_foundations/README.md`.
+- [x] Ruff, mypy strict on `src/`, and `pytest -q` all pass on the
+      Phase 1 branch.
+
+Notes / decisions:
+
+- Tests legitimately import the `scratch_*` files via `importlib.util` for
+  agreement testing only — the project's import path still excludes
+  `phases/`, so no runtime code can accidentally depend on pedagogical
+  implementations.
+- Two-implementation agreement on Sinkhorn at reg=0.1 holds to atol≈1e-4
+  on the plan; both solvers converge to the same fixed point but apply
+  slightly different last-step normalisations. Documented inline.
+- The figures script and the notebook share a single `demo.py` module to
+  keep them in sync.
 
 ### 2026-05-18 — Phase 0: repository scaffolding & environment setup
 
@@ -48,21 +99,23 @@ Notes / decisions:
 - POT-equivalent OT solvers will land in `src/ot_steering/ot/` in Phase 1 alongside
   the from-scratch pedagogical implementations in `phases/phase_01_ot_foundations/`.
 
-## Next session (Phase 1) — OT foundations
+## Next session (Phase 2) — Gromov-Wasserstein
 
-Goal: reader and code both understand discrete OT and Sinkhorn from the ground up.
+Goal: reader and code both understand structural matching across incomparable spaces.
 
 Deliverables:
 
-- From-scratch discrete OT via `scipy.optimize.linprog` (pedagogical only).
-- From-scratch Sinkhorn (pedagogical only).
-- POT-equivalents called from `src/ot_steering/ot/`.
-- 2D-Gaussian transport demo notebook.
-- Property tests (W(p, p) == 0, symmetry, scale invariance) for our POT wrappers.
-- `phases/phase_01_ot_foundations/chapter.md`.
+- Thin wrappers in `src/ot_steering/ot/gw.py` over POT's
+  `entropic_gromov_wasserstein` with pydantic-validated config.
+- Barycentric projection utility in `src/ot_steering/ot/barycentric.py`.
+- Toy demo: GW recovers a known rotation between two 2D point clouds with no
+  shared coordinate frame.
+- Tests.
+- `phases/phase_02_gromov_wasserstein/chapter.md`.
 
-Done when: pedagogical implementations match POT within tolerance on a 2D test;
-chapter 1 explains OT to someone who has never seen it; all tests pass.
+Done when: GW correctly recovers the known correspondence on a 2D toy across
+multiple seeds; barycentric projection is implemented and tested; chapter 2
+reads naturally and follows Chapter 1's voice.
 
 ## Open issues
 

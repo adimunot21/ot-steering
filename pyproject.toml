@@ -93,6 +93,12 @@ ignore = [
 [tool.ruff.lint.isort]
 known-first-party = ["ot_steering"]
 
+[tool.ruff.lint.per-file-ignores]
+# The from-scratch pedagogical OT implementations deliberately use the
+# capital-letter math symbol M for the cost matrix to mirror Peyré & Cuturi
+# and the chapter prose. Allow it here only.
+"phases/phase_01_ot_foundations/scratch_*.py" = ["N803", "N806"]
+
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"
