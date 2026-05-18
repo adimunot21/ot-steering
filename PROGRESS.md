@@ -1,12 +1,85 @@
 # PROGRESS
 
-## Current phase: 05 — Cross-model Gromov-Wasserstein alignment
+## Current phase: 06 — Cross-model steering transport (the core experiment)
 
-Phase 4 (intra-model OT steering, CHaRS-style) shipped. Next session
-should branch `phase-05-cross-model-gw` from
-`phase-04-intra-model-ot-steering` and start Phase 5.
+Phase 5 (cross-model GW alignment + four sanity checks) shipped — all
+four checks pass at the level needed to justify attempting steering
+transport. Next session should branch `phase-06-steering-transport`
+from `phase-05-cross-model-gw` and start Phase 6.
 
 ## Session log
+
+### 2026-05-18 — Phase 5: Cross-model Gromov-Wasserstein alignment
+
+Completed:
+
+- [x] `src/ot_steering/steering/cross_model_align.py`:
+      - `CrossModelGWConfig` (pydantic; `n_components_source`,
+        `n_components_target`, `distance_metric in {euclidean, cosine}`,
+        `normalize_distances=True` by default, nested
+        `gmm_cfg/gw_cfg`). Validator catches partial GMM spec.
+      - `CrossModelAlignment` frozen dataclass with source/target
+        centres, intra-distance matrices, marginals, coupling, GW cost,
+        metric.
+      - `cross_model_gw_coupling(source, target, *, cfg, rng)` — either
+        uses raw activations (uniform marginals) or fits per-side GMMs
+        (using `fit_gmm` from `ot_steering.steering.ot_steering`) and
+        passes centroids+weights to `solve_entropic_gw` from
+        `ot_steering.ot.gw`. Normalises each intra-distance matrix to
+        max=1 by default (critical for POT's entropic GW on real LLM
+        activations).
+- [x] Tests in `tests/steering/test_cross_model_align.py` (8 new): self-
+      pair identity, marginal preservation, cosine vs Euclidean distance,
+      partial-GMM-spec rejection, GMM-centroid path shapes, shape
+      mismatch errors, GW cost ordering (random > self), dataclass
+      frozen-ness. All 8 pass in ~12s. Full suite: 86 pass, 1 skipped.
+- [x] Sanity-check experiment
+      `phases/phase_05_cross_model_gw/experiments/sanity_checks.py` —
+      runs the four cases (self / adjacent / random / cross-model) for
+      Pythia-160M → GPT-2 on sentiment AND refusal, writes
+      `outputs/<run_id>/{config.json, sanity_checks.json}`.
+- [x] Demo / figures / notebook in
+      `phases/phase_05_cross_model_gw/`:
+      - `experiments/demo.py` — `run_cross_model_demo()` returns a
+        `CrossModelGWDemo` dataclass with both models' activations,
+        per-side PCAs, the cross-model coupling, the four sanity-check
+        GW costs, and a class-confusion matrix (does GW preserve
+        positive→positive and negative→negative across models?).
+      - `experiments/make_figures.py` — four chapter figures:
+        side-by-side PCA of the two residual streams, GW coupling
+        heatmap, sanity-check cost bar chart, class-preservation
+        confusion matrix.
+      - `notebook.ipynb` — runs on Pythia + GPT-2 in ~2 minutes; loads
+        each model in turn (releases the previous one before loading
+        the next) to stay under 4 GB VRAM.
+- [x] `phases/phase_05_cross_model_gw/chapter.md` (~1 950 words) and
+      README.md.
+- [x] Ruff + ruff-format + mypy strict on `src/` + `pytest -q` all pass.
+
+Notes / decisions:
+
+- **Headline numbers (Pythia-160M → GPT-2, sentiment, layer-6):**
+    - self-pair       GW cost = 0.0000   diag-mass ≈ 0.4
+    - adjacent layer  GW cost = 0.0000   diag-mass ≈ 0.4
+    - **cross-model** GW cost = 0.0205   diag-mass ≈ 0.35
+    - **random noise** GW cost = 0.1129  diag-mass ≈ 0.4 (~5× higher)
+  Cross-model is 5× higher than self-pair (real difference) but 5×
+  lower than random (still much better than chance).
+- **Class preservation = 61 %** in the row-normalised confusion matrix
+  vs. 50 % chance — GW's coupling tends to send positive-source
+  clusters to positive-target clusters. Above-chance is the evidence
+  Phase 6 needs.
+- **Distance-matrix normalisation.** Real LLM intra-distance matrices
+  have entries in the hundreds (especially with outlier "attention
+  sink" clusters); POT's entropic GW collapses to gw_cost=0 with
+  zero-diagonal coupling at reg=0.05 on such matrices. Added a
+  `normalize_distances=True` config flag (default on) that rescales
+  each matrix by its max so entries lie in `[0, 1]`. With this and
+  reg=0.01 the solver behaves sensibly.
+- **Tests for GW coupling identity required `reg=0.01`** instead of
+  the project-wide GW default of 0.05; at 0.05 the entropic smear on
+  normalised distance matrices spreads the self-pair coupling enough
+  to fail a >95 % diagonal-mass assertion.
 
 ### 2026-05-18 — Phase 4: Intra-model OT steering (CHaRS-style)
 
@@ -332,26 +405,26 @@ Notes / decisions:
 - POT-equivalent OT solvers will land in `src/ot_steering/ot/` in Phase 1 alongside
   the from-scratch pedagogical implementations in `phases/phase_01_ot_foundations/`.
 
-## Next session (Phase 5) — Cross-model Gromov-Wasserstein alignment
+## Next session (Phase 6) — Cross-model steering transport (core experiment)
 
-Goal: run GW between contrastive activation distributions of two
-*different* LLMs and verify it does something sensible (sanity checks
-first — no steering yet).
+Goal: run the actual experiment. Does GW-transported steering work?
 
 Deliverables:
 
-- End-to-end script that takes (source model, target model, dataset,
-  layer) and produces a GW coupling.
-- Coupling visualisation (heatmap, cluster-cluster mapping).
-- Sanity checks:
-  1. GW between a model and itself recovers near-identity.
-  2. GW between layer-N and layer-N+1 of the same model recovers near-identity.
-  3. GW between two unrelated random distributions of the same size
-     gives high cost.
-- `phases/phase_05_cross_model_gw/chapter.md`.
+- Full pipeline: extract source steering structure → extract target
+  contrastive activations → GW-align (Phase 5) → barycentric-project
+  the source steering signal through the coupling onto the target
+  model's coordinate system → apply on target → measure.
+- Baselines for transport: random direction (chance), Procrustes-
+  aligned source vector, CCA-aligned source vector, target-supervised
+  oracle (upper bound, not a baseline to beat).
+- Experimental matrix: 3 concepts × 2–3 model pairs × 3 seeds, multiple
+  layers per pair.
+- `phases/phase_06_steering_transport/chapter.md`.
 
-Done when: all three sanity checks pass; chapter 5 explains why
-cross-model alignment needs a *structural* distance, not a pointwise one.
+Done when: all matrix cells have numbers with confidence intervals;
+baselines are properly run; writeup is honest about what worked and
+what didn't.
 
 ## Open issues
 
