@@ -1,15 +1,81 @@
 # PROGRESS
 
-## Current phase: 07 — Diagnostic analysis
+## Current phase: 08 — Synthesis and paper draft
 
-Phase 6 (cross-model steering transport — the core experiment) shipped.
-GW transport beat both random and Procrustes baselines on both cells of
-the experimental matrix, recovering 75–87 % of the target-supervised
-oracle's lift without target-side concept labels. Next session should
-branch `phase-07-diagnostics` from `phase-06-steering-transport` and
-start Phase 7.
+Phase 7 (diagnostic analysis) shipped. The headline finding is a
+**null**: Spearman ρ between cross-model GW cost and GW-transport
+shift rate is −0.17 [95 % CI −0.45, +0.16] across 36 cells —
+not significantly different from zero. The chapter is honest about
+why (small eval split, discrete shift-rate axis, only two base-LM
+pairs) and what would be needed for a decisive answer. The
+infrastructure (sweep + bootstrap correlation + four figures)
+is now in place for richer matrices. Next session should branch
+`phase-08-synthesis` from `phase-07-diagnostics` and start Phase 8.
 
 ## Session log
+
+### 2026-05-19 — Phase 7: Diagnostic analysis
+
+Completed:
+
+- [x] `src/ot_steering/eval/correlation.py`:
+      `spearman_with_bootstrap_ci(x, y, *, n_boot, confidence, seed)`
+      — wraps `scipy.stats.spearmanr` with a bootstrap percentile CI.
+      Resamples that produce constant arrays (NaN ρ) are re-drawn.
+- [x] Tests in `tests/eval/test_correlation.py` (6 new): perfectly-
+      correlated and perfectly-anti-correlated data, independent
+      data with CI containing zero, CI widens with smaller samples,
+      shape-mismatch and too-few-points rejection. All 6 pass in ~2 s.
+      Full suite: 104 pass, 1 skipped.
+- [x] `phases/phase_07_diagnostics/experiments/sweep.py`:
+      Runs the Phase 6 GW-transport pipeline on a 36-cell matrix
+      (2 pairs × 3 layers × 3 ks × 2 seeds). Amortises model loads
+      (per pair, load each model once, extract activations at all
+      three layer depths in a single sweep). Writes
+      `outputs/<run_id>/sweep.json`. Total runtime ~10 minutes.
+- [x] `phases/phase_07_diagnostics/experiments/analyse_correlations.py`:
+      reads the latest `sweep.json`, computes Spearman ρ across all
+      cells + per-pair with bootstrap 95 % CIs, writes
+      `outputs/<run_id>/correlations.json`, and renders the four
+      chapter figures (scatter with ρ, layer-effect bars, k-effect
+      bars, single-pane summary).
+- [x] `phases/phase_07_diagnostics/chapter.md` (~1 800 words). The
+      diagnostic question, the sweep design, the null headline, why
+      the null happens (small eval split → discrete shift-rate axis,
+      k=2 GW degeneracy, per-pair sign disagreement), where to look
+      for a real signal next. README.md too.
+- [x] pyproject.toml: added `scipy` / `scipy.*` to mypy's
+      `ignore_missing_imports` overrides (no published stubs yet).
+- [x] Ruff + ruff-format + mypy strict on `src/` + `pytest -q` all pass.
+
+Headline numbers (36 cells, 2 pairs × 3 layers × 3 ks × 2 seeds):
+
+  Spearman ρ (all cells)          = −0.17  [95 % CI −0.45, +0.16]
+  Spearman ρ (k > 2 only, n=24)   = −0.05  [95 % CI −0.46, +0.38]
+  Spearman ρ (gpt2 → pythia)      = −0.24  [95 % CI −0.64, +0.24]
+  Spearman ρ (pythia → gpt2)      = +0.06  [95 % CI −0.45, +0.57]
+
+Null result; the two pairs even disagree in sign. The chapter is
+honest about this and identifies the most plausible reasons (small
+N, discrete shift-rate axis, base-LMs-only matrix).
+
+Notes / decisions:
+
+- **k=2 is structurally degenerate.** With only two centroids per side
+  and a normalised distance matrix in [0, 1], POT's entropic GW
+  collapses to gw_cost=0.0000 on every k=2 cell across both pairs.
+  Excluding those rows doesn't change the headline (it stays near zero).
+- **Lexicon shift judge over 20 prompts** quantises the y-axis to
+  steps of 5 %. With most cells landing at 5 % or 10 %, Spearman ρ has
+  very few rank ties to exploit. A bigger eval split or a continuous
+  judge is the obvious next step.
+- **Per-pair sign disagreement.** `gpt2 → pythia` weakly negative,
+  `pythia → gpt2` weakly positive. Even granting larger sample size,
+  a single ρ across pairs probably won't work — the predictive signal
+  (if any) is per-pair.
+- **Honest negative result is shipped as the chapter.** The
+  infrastructure (sweep, bootstrap CI helper, scatter + per-axis
+  figures) is what carries forward into Phase 8 and beyond.
 
 ### 2026-05-18 — Phase 6: Cross-model steering transport (core experiment)
 
@@ -495,22 +561,21 @@ Notes / decisions:
 - POT-equivalent OT solvers will land in `src/ot_steering/ot/` in Phase 1 alongside
   the from-scratch pedagogical implementations in `phases/phase_01_ot_foundations/`.
 
-## Next session (Phase 7) — Diagnostic analysis
+## Next session (Phase 8) — Paper draft and polish
 
-Goal: even if transport works only sometimes, understand *when*. Three
-questions, with Phase 6's pipeline as the probe:
+Goal: workshop-quality writeup and a reproducible repo.
 
 Deliverables:
 
-- Per-(concept, model-pair, layer) breakdown of transport success.
-- Correlation analysis: does GW cost predict transfer success?
-  (Scatter plot + Spearman ρ across all matrix cells.)
-- Failure-mode analysis: layer effect, sample-size effect, cluster-
-  count effect, GW initialisation sensitivity.
-- `phases/phase_07_diagnostics/chapter.md`.
+- Consolidated paper draft (markdown or LaTeX) reusing course chapters.
+- Reproducibility README: clone → install → `make all-figures`
+  regenerates every figure in the paper.
+- Chapter 8 ("synthesis") tying the project together.
+- Final pass on figures, citations, claims.
 
-Done when: we can state in one sentence *when* GW transport works for
-steering, with evidence.
+Done when: a researcher who has never seen the repo can clone, install,
+and regenerate the figures with one command, and the writeup states
+the contribution clearly and honestly.
 
 ## Open issues
 
