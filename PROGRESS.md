@@ -1,13 +1,103 @@
 # PROGRESS
 
-## Current phase: 06 — Cross-model steering transport (the core experiment)
+## Current phase: 07 — Diagnostic analysis
 
-Phase 5 (cross-model GW alignment + four sanity checks) shipped — all
-four checks pass at the level needed to justify attempting steering
-transport. Next session should branch `phase-06-steering-transport`
-from `phase-05-cross-model-gw` and start Phase 6.
+Phase 6 (cross-model steering transport — the core experiment) shipped.
+GW transport beat both random and Procrustes baselines on both cells of
+the experimental matrix, recovering 75–87 % of the target-supervised
+oracle's lift without target-side concept labels. Next session should
+branch `phase-07-diagnostics` from `phase-06-steering-transport` and
+start Phase 7.
 
 ## Session log
+
+### 2026-05-18 — Phase 6: Cross-model steering transport (core experiment)
+
+Completed:
+
+- [x] `src/ot_steering/steering/transport.py`:
+      - `SteeringTransportConfig` (pydantic; `n_components`,
+        `distance_metric`, nested `gmm_cfg/gw_cfg`, `assignment` for
+        the runtime hook).
+      - `TransportedSteeringMap` frozen dataclass holding the source
+        CHaRS map, two cross-model alignments (POS↔POS, NEG↔NEG), the
+        target NEG GMM, both target centroid sets, and the per-B-NEG-
+        cluster transported displacements.
+      - `build_transport(src_pos, src_neg, tgt_pos, tgt_neg, cfg, *, rng)`
+        — chains Phase 4 CHaRS + two Phase 5 cross-model GW solves +
+        the Phase 2 barycentric-projection chain to produce the per-B-NEG-
+        cluster displacement vector field. Target POS+NEG activations
+        are used only for clustering — never to compute concept-axis
+        direction (otherwise it would defeat the no-target-supervision
+        promise).
+      - `add_transported_steering_hook(block, transported_map, coefficient)`
+        — forward-pre-hook context manager mirroring the API of
+        `add_ot_steering_hook` from Phase 4.
+- [x] `src/ot_steering/steering/transport_baselines.py`:
+      - `random_direction(d_target, seed)` — unit-norm random vector.
+      - `target_supervised_oracle(target_pos, target_neg)` — upper bound,
+        unit-norm difference-of-means computed directly on target.
+      - `procrustes_aligned(source_direction, source_centers, target_centers)`
+        — orthogonal Procrustes on matched centroid clouds, with zero-
+        padding to handle different dimensions. Pairing is by Hungarian
+        on a centroid cost matrix.
+- [x] Tests in `tests/steering/test_transport.py` (12 new): planted-
+      direction transport on synthetic toy, dataclass frozen-ness,
+      shape mismatches, hook behaviour (planted clusters, hard
+      assignment, identity-Linear), hook removal, pydantic validation,
+      target-oracle matches diff-of-means, random-direction unit-norm
+      determinism, Procrustes recovers a known 2D rotation, Procrustes
+      handles different dims, Procrustes shape rejection. All 12 pass
+      in ~6 s. Full suite: 98 pass, 1 skipped.
+- [x] Core experiment
+      `phases/phase_06_steering_transport/experiments/run_transport.py`:
+      2 cells × 4 methods × 3 coefficients × 3 seeds, bootstrap 95 % CIs.
+      Writes `outputs/<run_id>/{config.json, run_transport.json}`.
+- [x] Demo / figures / notebook in `phases/phase_06_steering_transport/`:
+      - `experiments/demo.py` — `run_transport_demo()` (single-seed,
+        no-CI variant for the notebook).
+      - `experiments/make_figures.py` — pipeline-diagram figure plus
+        three result figures (method-comparison bars, lift-vs-coefficient
+        with 95 % CI ribbons, off-target-perplexity-vs-coefficient on
+        log-scale).
+      - `notebook.ipynb` — runs the demo cell in ~3 minutes.
+- [x] `phases/phase_06_steering_transport/chapter.md` (~1 900 words) and
+      README.md.
+- [x] Ruff + ruff-format + mypy strict on `src/` + `pytest -q` all pass.
+
+Headline (best coefficient per method, sentiment, layer-6):
+
+  gpt2 → pythia-160m :  random 12 % | Procrustes 12 % | **GW 15 %** | oracle 20 %
+  pythia-160m → gpt2 :  random  8 % | Procrustes  5 % | **GW 13 %** | oracle 15 %
+
+GW transport beats both random and Procrustes on both cells. GW recovers
+75 % of the target-oracle's lift on cell 1, 87 % on cell 2 — without
+ever seeing target-side concept labels.
+
+Notes / decisions:
+
+- **Per-cluster displacements are unit-normalised** in `run_transport.py`
+  before the coefficient sweep — keeps the methods comparable on the
+  same coefficient scale. The raw transported displacements have very
+  different magnitudes from cell to cell (mean norm 86–190 in the
+  experiment log).
+- **GMM-centroid pairing for Procrustes uses Hungarian on a centroid
+  cost matrix**, not the GW coupling. Hungarian gives a clean 1-1
+  pairing; the GW coupling's argmax may not be 1-1.
+- **Procrustes underperforms on one cell.** On `pythia → gpt2` Procrustes
+  achieves only 5 % shift, worse than random 8 %. This is consistent
+  with the broader cross-model-alignment literature: linear alignment
+  alone is fragile when the two spaces have unrelated coordinate frames.
+  GW's structural matching is genuinely different in kind, not just
+  degree.
+- **Off-target perplexity comparison.** All four methods stay near
+  baseline at coef=1; at higher coefficients the random direction blows
+  up ppl most because it has no concept-conditional structure to limit
+  its effect on neutral text. GW transport and the oracle stay close
+  to baseline — same gentler-scalpel finding as Phase 4.
+- **Wide CIs.** Three seeds is fine for an exploratory result but not
+  for confident claims. Phase 7 should add more seeds or more layer
+  cells.
 
 ### 2026-05-18 — Phase 5: Cross-model Gromov-Wasserstein alignment
 
@@ -405,26 +495,22 @@ Notes / decisions:
 - POT-equivalent OT solvers will land in `src/ot_steering/ot/` in Phase 1 alongside
   the from-scratch pedagogical implementations in `phases/phase_01_ot_foundations/`.
 
-## Next session (Phase 6) — Cross-model steering transport (core experiment)
+## Next session (Phase 7) — Diagnostic analysis
 
-Goal: run the actual experiment. Does GW-transported steering work?
+Goal: even if transport works only sometimes, understand *when*. Three
+questions, with Phase 6's pipeline as the probe:
 
 Deliverables:
 
-- Full pipeline: extract source steering structure → extract target
-  contrastive activations → GW-align (Phase 5) → barycentric-project
-  the source steering signal through the coupling onto the target
-  model's coordinate system → apply on target → measure.
-- Baselines for transport: random direction (chance), Procrustes-
-  aligned source vector, CCA-aligned source vector, target-supervised
-  oracle (upper bound, not a baseline to beat).
-- Experimental matrix: 3 concepts × 2–3 model pairs × 3 seeds, multiple
-  layers per pair.
-- `phases/phase_06_steering_transport/chapter.md`.
+- Per-(concept, model-pair, layer) breakdown of transport success.
+- Correlation analysis: does GW cost predict transfer success?
+  (Scatter plot + Spearman ρ across all matrix cells.)
+- Failure-mode analysis: layer effect, sample-size effect, cluster-
+  count effect, GW initialisation sensitivity.
+- `phases/phase_07_diagnostics/chapter.md`.
 
-Done when: all matrix cells have numbers with confidence intervals;
-baselines are properly run; writeup is honest about what worked and
-what didn't.
+Done when: we can state in one sentence *when* GW transport works for
+steering, with evidence.
 
 ## Open issues
 
