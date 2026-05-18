@@ -1,0 +1,91 @@
+# --- Python -------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+*.egg
+pip-wheel-metadata/
+.installed.cfg
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+coverage.xml
+*.cover
+
+# --- Virtual environments -----------------------------------------------------
+.venv/
+venv/
+env/
+ENV/
+
+# --- Jupyter ------------------------------------------------------------------
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+.jupyter/
+
+# --- PyTorch / ML caches ------------------------------------------------------
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.bin
+*.onnx
+checkpoints/*.pt
+checkpoints/*.pth
+
+# Hugging Face & related caches when accidentally placed in-repo.
+.cache/
+hf_cache/
+.huggingface/
+.transformers/
+
+# Experiment tracking
+wandb/
+mlruns/
+lightning_logs/
+tensorboard/
+
+# --- Project-specific ---------------------------------------------------------
+# Run artifacts (always regenerable from configs + code). Use `outputs/*`
+# (not `outputs/`) so the negation below actually applies.
+outputs/*
+!outputs/.gitkeep
+# Datasets & activation caches (large; regenerable). Ignore contents,
+# but keep the directory itself so the repo bootstraps cleanly. We use
+# `data/*` (not `data/`) so the negation below actually applies.
+data/*
+!data/.gitkeep
+
+# --- Secrets ------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+credentials.json
+
+# --- Editor / IDE -------------------------------------------------------------
+.vscode/
+!.vscode/settings.json.example
+.idea/
+*.swp
+*.swo
+*~
+
+# --- OS -----------------------------------------------------------------------
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- Logs ---------------------------------------------------------------------
+*.log
+logs/

@@ -1,0 +1,34 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-added-large-files
+        args: ["--maxkb=512"]
+      - id: check-merge-conflict
+      - id: detect-private-key
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.6.9
+    hooks:
+      - id: ruff
+        args: ["--fix"]
+      - id: ruff-format
+
+  # mypy runs against the project venv (not a hook-managed env) so it can see
+  # torch/numpy/etc. — installing those into a parallel pre-commit env would
+  # duplicate gigabytes of CUDA wheels. `language: system` calls whatever
+  # `mypy` is on PATH, which is the project venv after `pip install -e ".[dev]"`.
+  - repo: local
+    hooks:
+      - id: mypy
+        name: mypy (strict on src/)
+        entry: mypy
+        language: system
+        types_or: [python, pyi]
+        files: ^src/
+        args: ["--config-file=pyproject.toml"]
+        pass_filenames: false

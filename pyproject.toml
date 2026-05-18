@@ -1,0 +1,148 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "ot-steering"
+version = "0.0.1"
+description = "Cross-architecture concept-vector transport via Gromov-Wasserstein optimal transport."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Aditya Munot", email = "adimunot21@gmail.com" }]
+keywords = [
+    "optimal-transport",
+    "gromov-wasserstein",
+    "mechanistic-interpretability",
+    "llm-steering",
+]
+classifiers = [
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Operating System :: POSIX :: Linux",
+    "Intended Audience :: Science/Research",
+]
+
+# Runtime deps. Torch is left unpinned at the major-version level so pip can
+# select the wheel variant (cu121, cu124, cu13, cpu) that matches the local
+# CUDA toolchain. On a GTX 1650 with a CUDA 12.1+ driver, plain `pip install`
+# does the right thing; if you specifically need the cu121 variant, install
+# torch first from https://download.pytorch.org/whl/cu121 before this package.
+dependencies = [
+    "torch>=2.2",
+    "transformers>=4.40",
+    "accelerate>=0.30",
+    "bitsandbytes>=0.43",
+    "POT>=0.9.3",
+    "numpy>=1.26,<2.3",
+    "scipy>=1.11",
+    "scikit-learn>=1.4",
+    "einops>=0.7",
+    "matplotlib>=3.8",
+    "pydantic>=2.6",
+    "pyyaml>=6.0",
+    "tqdm>=4.66",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+    "ruff>=0.6",
+    "mypy>=1.10",
+    "pre-commit>=3.7",
+    "ipykernel>=6.29",
+    "jupyter>=1.0",
+    "types-PyYAML>=6.0",
+    "types-tqdm>=4.66",
+]
+
+[project.urls]
+Repository = "https://github.com/adimunot21/ot-concept-transport"
+
+# --- Hatch build configuration -------------------------------------------------
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ot_steering"]
+
+# --- Ruff: lint + format -------------------------------------------------------
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests", "scripts"]
+extend-exclude = ["outputs", "data", ".venv", "phases/*/notebook.ipynb"]
+
+[tool.ruff.lint]
+# Default ruleset (E, F, W) + pyupgrade (UP) + isort (I) + bugbear (B) +
+# simplify (SIM) + pep8-naming (N). Plus a handful of style nudges.
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "W",   # pycodestyle warnings
+    "I",   # isort
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "SIM", # flake8-simplify
+    "N",   # pep8-naming
+]
+ignore = [
+    "E501", # line length handled by formatter
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["ot_steering"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+# --- Mypy: strict on src/ ------------------------------------------------------
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+show_error_codes = true
+mypy_path = "src"
+explicit_package_bases = true
+namespace_packages = true
+files = ["src"]
+
+[[tool.mypy.overrides]]
+module = [
+    "bitsandbytes",
+    "bitsandbytes.*",
+    "ot",
+    "ot.*",
+    "sklearn",
+    "sklearn.*",
+    "transformers",
+    "transformers.*",
+    "einops",
+    "einops.*",
+    "matplotlib",
+    "matplotlib.*",
+    "tqdm",
+    "tqdm.*",
+]
+ignore_missing_imports = true
+
+# Tests and scripts don't need strict typing.
+[[tool.mypy.overrides]]
+module = ["tests.*", "scripts.*"]
+ignore_errors = true
+
+# --- Pytest --------------------------------------------------------------------
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-ra --strict-markers"
+filterwarnings = [
+    "error",
+    "ignore::DeprecationWarning:torch.*",
+    "ignore::UserWarning:bitsandbytes.*",
+]
