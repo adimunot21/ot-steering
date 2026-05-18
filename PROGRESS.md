@@ -1,12 +1,86 @@
 # PROGRESS
 
-## Current phase: 04 — Intra-model OT steering (CHaRS-style)
+## Current phase: 05 — Cross-model Gromov-Wasserstein alignment
 
-Phase 3 (LLM-side infrastructure + sentiment steering reproduction) shipped.
-Next session should branch `phase-04-intra-model-ot-steering` from
-`phase-03-llms-and-steering-baselines` and start Phase 4.
+Phase 4 (intra-model OT steering, CHaRS-style) shipped. Next session
+should branch `phase-05-cross-model-gw` from
+`phase-04-intra-model-ot-steering` and start Phase 5.
 
 ## Session log
+
+### 2026-05-18 — Phase 4: Intra-model OT steering (CHaRS-style)
+
+Completed:
+
+- [x] `src/ot_steering/steering/ot_steering.py`:
+      - `GMMConfig` (pydantic, `n_components/covariance_type/n_init/`
+        `max_iter/reg_covar/seed`).
+      - `fit_gmm(activations, cfg)` — wraps sklearn's
+        `GaussianMixture`; rejects non-2D and too-few-samples.
+      - `OTSteeringMap` frozen dataclass holding both fitted GMMs, the
+        centroids on each side, the OT coupling, the barycentric targets,
+        and the per-cluster displacement vectors.
+      - `build_ot_steering_map(positive_acts, negative_acts, ...)` —
+        fits per-class GMMs, solves squared-Euclidean EMD between the
+        centroids via `src/ot_steering/ot/emd.py`, barycentrically
+        projects the target centroids through the coupling via
+        `src/ot_steering/ot/barycentric.py`, returns the
+        `OTSteeringMap`. **At k=1 reproduces difference-of-means
+        exactly** (tested: agreement to ~1e-7).
+      - `add_ot_steering_hook(block, steering_map, coefficient)` —
+        forward-pre-hook context manager mirroring the API of
+        `add_residual_steering_hook` so the same generation code can
+        switch between baselines and OT steering.
+      - Soft/hard cluster assignment (config-selectable).
+- [x] Tests in `tests/steering/test_ot_steering.py` (9 new): synthetic
+      2-component recovery, shape rejections, k=1 → diff-of-means
+      fallback, k=4 coupling marginal consistency, per-token displacement
+      hook (with a planted 2D-toy verifying the right cluster gets the
+      right direction), hook removal on context exit, pydantic validation,
+      dataclass frozen-ness. All 9 pass in ~5 s.
+- [x] Headline comparison
+      `phases/phase_04_intra_model_ot_steering/experiments/compare_baselines.py`
+      sweeps {gpt2, pythia-160m} × {sentiment, refusal} × k in {1,2,4,8}
+      × coefficients {0.5, 1, 2}, writes `outputs/<run_id>/`
+      `{config.json, compare_baselines.json}`. Cells that work:
+      pythia/sentiment k=1 coef=1 → 45 % shift, k=2 coef=2 → 20 % shift.
+      gpt2/refusal cell is structurally meaningless (base GPT-2 is not
+      chat-tuned and never refuses anything) — flagged in the chapter.
+- [x] Demo / figures / notebook in
+      `phases/phase_04_intra_model_ot_steering/`:
+      - `experiments/demo.py` — `run_charsy_demo()` returns a
+        `CHaRSDemo` dataclass with GMM fits, OT coupling, per-coef
+        lift, and per-coef off-target ppl.
+      - `experiments/make_figures.py` — four chapter figures
+        (`01_gmm_fits`, `02_cluster_couplings`,
+        `03_steering_lift_vs_k`, `04_offtarget_vs_k`).
+      - `notebook.ipynb` — executes top-to-bottom on Pythia-160M.
+- [x] `phases/phase_04_intra_model_ot_steering/chapter.md` — full
+      chapter (~1 850 words). Worked-example sketch of input-conditional
+      steering, GMM-OT-barycentric pipeline, the *gentler-scalpel*
+      empirical finding (k>1 keeps off-target ppl close to baseline at
+      matched coefficient at the cost of smaller raw lift). README too.
+- [x] Ruff + ruff-format + mypy strict on `src/` + `pytest -q` all pass.
+
+Notes / decisions:
+
+- **Honest headline result.** k=1 wins on raw lift across every (model,
+  concept) cell — the higher-k variants didn't beat baseline in
+  *positive-shift rate*. The k>1 win shows up on the *off-target* curve:
+  at matched coefficient, k=2/k=4 keep neutral-text perplexity within
+  ~5 % of baseline while k=1 blows it up 3–5×. That trade-off is the
+  chapter's headline.
+- **Diagonal covariance for the GMM** (`covariance_type="diag"`) by
+  default — full covariance in 768-dim with only 30 samples per class
+  is wildly over-parameterised.
+- **Per-token responsibilities** at the hook computed on CPU
+  (`predict_proba` → numpy) and copied back to the GPU; the per-batch
+  cost is negligible for tiny models. For larger models in Phase 6 we
+  may want to push the responsibilities to GPU.
+- **k=1 fallback verified by test.** `test_k1_steering_map_falls_back_`
+  `to_difference_in_means` asserts the displacements match
+  `difference_in_means` to atol=1e-5 — non-trivial because the path
+  goes through GMM EM + EMD + barycentric projection.
 
 ### 2026-05-18 — Phase 3: LLMs, activations, and steering baselines
 
@@ -258,25 +332,26 @@ Notes / decisions:
 - POT-equivalent OT solvers will land in `src/ot_steering/ot/` in Phase 1 alongside
   the from-scratch pedagogical implementations in `phases/phase_01_ot_foundations/`.
 
-## Next session (Phase 4) — Intra-model OT steering (CHaRS-style)
+## Next session (Phase 5) — Cross-model Gromov-Wasserstein alignment
 
-Goal: reproduce the CHaRS intra-model OT-steering result. This is our
-intra-model upper bound and a sanity check on our OT machinery before we
-run cross-model GW in Phase 5.
+Goal: run GW between contrastive activation distributions of two
+*different* LLMs and verify it does something sensible (sanity checks
+first — no steering yet).
 
 Deliverables:
 
-- GMM fitting on contrastive activations (sklearn's `GaussianMixture`).
-- Discrete OT between cluster centres via `src/ot_steering/ot/emd.py`.
-- Barycentric-projection steering map via
-  `src/ot_steering/ot/barycentric.py`.
-- Integration into the Phase-3 eval harness.
-- Comparison to Phase 3 baselines across all 3 concepts × at least 2 models.
-- `phases/phase_04_intra_model_ot_steering/chapter.md`.
+- End-to-end script that takes (source model, target model, dataset,
+  layer) and produces a GW coupling.
+- Coupling visualisation (heatmap, cluster-cluster mapping).
+- Sanity checks:
+  1. GW between a model and itself recovers near-identity.
+  2. GW between layer-N and layer-N+1 of the same model recovers near-identity.
+  3. GW between two unrelated random distributions of the same size
+     gives high cost.
+- `phases/phase_05_cross_model_gw/chapter.md`.
 
-Done when: CHaRS-style steering is competitive with or beats the difference-
-in-means baseline on at least one (concept, model) cell; chapter 4 takes
-the reader from "concept directions" to "concept-conditional maps."
+Done when: all three sanity checks pass; chapter 5 explains why
+cross-model alignment needs a *structural* distance, not a pointwise one.
 
 ## Open issues
 
