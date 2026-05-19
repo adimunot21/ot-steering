@@ -1,18 +1,50 @@
 # PROGRESS
 
-## Current phase: 08 — Synthesis and paper draft
+## Current phase: COMPLETE — project shipped
 
-Phase 7 (diagnostic analysis) shipped. The headline finding is a
-**null**: Spearman ρ between cross-model GW cost and GW-transport
-shift rate is −0.17 [95 % CI −0.45, +0.16] across 36 cells —
-not significantly different from zero. The chapter is honest about
-why (small eval split, discrete shift-rate axis, only two base-LM
-pairs) and what would be needed for a decisive answer. The
-infrastructure (sweep + bootstrap correlation + four figures)
-is now in place for richer matrices. Next session should branch
-`phase-08-synthesis` from `phase-07-diagnostics` and start Phase 8.
+All nine chapters (Phase 0 → Phase 8) shipped. The headline result —
+GW transport beats both random and Procrustes baselines on a
+Pythia-160M ↔ GPT-2-small sentiment task and recovers 75–87 % of the
+target-supervised oracle's lift without target-side concept labels —
+ships in Phase 6. The diagnostic question (does GW alignment cost
+predict transfer success?) got an honest null in this matrix and
+ships as Phase 7. The workshop-length writeup, the synthesis chapter,
+and a one-command `scripts/make_all_figures.py` regenerator ship as
+Phase 8.
 
 ## Session log
+
+### 2026-05-19 — Phase 8: Synthesis and paper draft
+
+Completed:
+
+- [x] `phases/phase_08_synthesis/paper.md` — workshop-length writeup
+      (~5 pages plus references). Abstract → introduction → background
+      (OT, GW, barycentric projection, CHaRS) → method (the transport
+      pipeline) → experiments (Phase 5 sanity checks + Phase 6 headline
+      table + Phase 7 null) → related work → discussion & limitations
+      → conclusion → references → reproducibility block.
+- [x] `phases/phase_08_synthesis/chapter.md` — synthesis chapter with
+      per-phase recaps, an honest accounting of what's
+      published-quality vs preliminary, the deferred follow-ups
+      (refusal on TinyLlama-Chat, continuous-valued judge, richer
+      matrix), and two paragraphs reflecting on the thread.
+- [x] `phases/phase_08_synthesis/README.md`.
+- [x] `scripts/make_all_figures.py` — calls each phase's
+      `experiments/make_figures.py` in chapter order; reuses
+      `outputs/<run_id>/*.json` for the Phase 6/7 figures.
+- [x] Top-level `README.md` updated: added "Project status" section
+      pointing at the headline result + paper, added "Reproducibility"
+      section with `make_all_figures.py` and how to refresh the
+      experimental artefacts, expanded the "Where to look" pointers.
+- [x] PROGRESS.md marked complete.
+- [x] Ruff + ruff-format + mypy strict on `src/` + `pytest -q` all pass.
+
+This is the end of the project. The code, the chapters, and the paper
+all live under one tree and reproduce from one command. Next session,
+if there is one, is whichever follow-up someone wants to take
+(refusal on TinyLlama-Chat is the obvious one — Phase 6's pipeline
+runs unchanged on a chat-tuned target).
 
 ### 2026-05-19 — Phase 7: Diagnostic analysis
 
@@ -561,21 +593,13 @@ Notes / decisions:
 - POT-equivalent OT solvers will land in `src/ot_steering/ot/` in Phase 1 alongside
   the from-scratch pedagogical implementations in `phases/phase_01_ot_foundations/`.
 
-## Next session (Phase 8) — Paper draft and polish
+## Project complete
 
-Goal: workshop-quality writeup and a reproducible repo.
-
-Deliverables:
-
-- Consolidated paper draft (markdown or LaTeX) reusing course chapters.
-- Reproducibility README: clone → install → `make all-figures`
-  regenerates every figure in the paper.
-- Chapter 8 ("synthesis") tying the project together.
-- Final pass on figures, citations, claims.
-
-Done when: a researcher who has never seen the repo can clone, install,
-and regenerate the figures with one command, and the writeup states
-the contribution clearly and honestly.
+No follow-up phase scheduled. The natural extensions (refusal on
+TinyLlama-Chat, continuous-valued eval judge, richer model-pair matrix)
+are listed at the end of Chapter 8 / paper.md and are out of scope for
+this codebase as it stands. Anyone picking up the project should branch
+from `phase-08-synthesis` (or the merged `main` once these PRs land).
 
 ## Open issues
 
